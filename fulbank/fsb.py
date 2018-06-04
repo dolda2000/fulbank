@@ -1,4 +1,4 @@
-import json, http.cookiejar, binascii, time
+import json, http.cookiejar, binascii, time, pickle
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
 soupify = lambda cont: soup(cont, "html.parser")
@@ -47,6 +47,50 @@ def getdsid():
 def base64(data):
     return binascii.b2a_base64(data).decode("ascii").strip().rstrip("=")
 
+class transaction(object):
+    def __init__(self, account, data):
+        self.account = account
+        self._data = data
+
+    @property
+    def amount(self): return float(resolve(self._data, ("amount",)))
+    @property
+    def message(self): return resolve(self._data, ("details", "message"))
+
+    def __repr__(self):
+        return "#<fsb.transaction %.2f: %r>" % (self.amount, self.message)
+
+class account(object):
+    def __init__(self, sess, id, idata):
+        self.sess = sess
+        self.id = id
+        self._data = None
+        self._idata = idata
+
+    @property
+    def data(self):
+        if self._data is None:
+            self._data = self.sess._jreq("v5/engagement/account/" + self.id)
+        return self._data
+
+    @property
+    def number(self): return resolve(self.data, ("accountNumber",))
+    @property
+    def clearing(self): return resolve(self.data, ("clearingNumber",))
+    @property
+    def fullnumber(self): return resolve(self.data, ("fullyFormattedNumber",))
+    @property
+    def name(self): return resolve(self._idata, ("name",))
+
+    def transactions(self):
+        pagesz = 50
+        data = self.sess._jreq("v5/engagement/transactions/" + self.id, transactionsPerPage=pagesz, page=1)
+        for tx in resolve(data, ("transactions",)):
+            yield transaction(self, tx)
+
+    def __repr__(self):
+        return "#<fsb.account %s: %r>" % (self.fullnumber, self.name)
+
 class session(object):
     def __init__(self, dsid):
         self.dsid = dsid
@@ -59,6 +103,7 @@ class session(object):
             discard=True, comment=None, comment_url=None,
             rest={}, rfc2109=False))
         self.userid = None
+        self._accounts = None
 
     def _req(self, url, data=None, ctype=None, headers={}, method=None, **kws):
         if "dsid" not in kws:
@@ -76,7 +121,7 @@ class session(object):
         req.add_header("Authorization", self.auth)
         self.jar.https_request(req)
         with request.urlopen(req) as resp:
-            if resp.code != 200:
+            if resp.code != 200 and resp.code != 201:
                 raise fmterror("Unexpected HTTP status code: " + str(resp.code))
             self.jar.https_response(req, resp)
             return resp.read()
@@ -86,6 +131,18 @@ class session(object):
         headers["Accept"] = "application/json"
         ret = self._req(*args, headers=headers, **kwargs)
         return json.loads(ret.decode("utf-8"))
+
+    def _postlogin(self):
+        auth = self._jreq("v5/user/authenticationinfo")
+        uid = auth.get("identifiedUser", "")
+        if uid == "":
+            raise fmterror("no identified user even after successful authentication")
+        self.userid = uid
+        prof = self._jreq("v5/profile/")
+        if len(prof["banks"]) != 1:
+            raise fmterror("do not know the meaning of multiple banks")
+        rolesw = linkurl(resolve(prof["banks"][0], ("privateProfile", "links", "next", "uri")))
+        self._jreq(rolesw, method="POST")
 
     def auth_bankid(self, user):
         data = self._jreq("v5/identification/bankid/mobile", data = {
@@ -101,19 +158,29 @@ class session(object):
             st = vdat.get("status")
             if st == "USER_SIGN":
                 continue
+            elif st == "CLIENT_NOT_STARTED":
+                continue
             elif st == "COMPLETE":
-                auth = self._jreq("v5/user/authenticationinfo")
-                uid = auth.get("identifiedUser", "")
-                if uid == "":
-                    raise fmterror("no identified user even after successful authentication")
-                self.userid = uid
+                self._postlogin()
                 return
             elif st == "CANCELLED":
                 raise autherror("authentication cancelled")
-            elif st == "CLIENT_NOT_STARTED":
-                raise autherror("authentication client not started")
             else:
                 raise fmterror("unexpected bankid status: " + str(st))
+
+    def keepalive(self):
+        data = self._jreq("v5/framework/clientsession")
+        return data["timeoutInMillis"] / 1000
+
+    @property
+    def accounts(self):
+        if self._accounts is None:
+            data = self._jreq("v5/engagement/overview")
+            accounts = []
+            for acct in resolve(data, ("transactionAccounts",)):
+                accounts.append(account(self, resolve(acct, ("id",)), acct))
+            self._accounts = accounts
+        return self._accounts
 
     def logout(self):
         if self.userid is not None:
@@ -131,6 +198,20 @@ class session(object):
         self.close()
         return False
 
+    def __repr__(self):
+        if self.userid is not None:
+            return "#<fsb.session %s>" % self.userid
+        return "#<fsb.session>"
+
     @classmethod
     def create(cls):
         return cls(getdsid())
+
+    def save(self, filename):
+        with open(filename, "wb") as fp:
+            pickle.dump(self, fp)
+
+    @classmethod
+    def load(cls, filename):
+        with open(filename, "rb") as fp:
+            return picke.load(fp)
