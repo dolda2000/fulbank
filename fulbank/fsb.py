@@ -1,6 +1,7 @@
 import json, http.cookiejar, binascii, time, pickle
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
+from . import currency
 soupify = lambda cont: soup(cont, "html.parser")
 
 apibase = "https://online.swedbank.se/TDE_DAP_Portal_REST_WEB/api/"
@@ -53,12 +54,12 @@ class transaction(object):
         self._data = data
 
     @property
-    def amount(self): return float(resolve(self._data, ("amount",)))
+    def value(self): return currency.currency.get(resolve(self._data, ("currency",))).parse(resolve(self._data, ("amount",)))
     @property
     def message(self): return resolve(self._data, ("details", "message"))
 
     def __repr__(self):
-        return "#<fsb.transaction %.2f: %r>" % (self.amount, self.message)
+        return "#<fsb.transaction %s: %r>" % (self.value, self.message)
 
 class account(object):
     def __init__(self, sess, id, idata):
