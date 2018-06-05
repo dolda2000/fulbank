@@ -1,4 +1,4 @@
-import json, http.cookiejar, binascii, time, pickle
+import json, http.cookiejar, binascii, time, datetime, pickle, hashlib
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
 from . import currency
@@ -53,10 +53,25 @@ class transaction(object):
         self.account = account
         self._data = data
 
+    _datefmt = "%Y-%m-%d"
+
     @property
     def value(self): return currency.currency.get(resolve(self._data, ("currency",))).parse(resolve(self._data, ("amount",)))
     @property
-    def message(self): return resolve(self._data, ("details", "message"))
+    def message(self): return resolve(self._data, ("description",))
+    @property
+    def date(self):
+        p = time.strptime(resolve(self._data, ("accountingDate",)), self._datefmt)
+        return datetime.date(p.tm_year, p.tm_mon, p.tm_mday)
+
+    @property
+    def hash(self):
+        dig = hashlib.sha256()
+        dig.update(str(self.date.toordinal()).encode("ascii") + b"\0")
+        dig.update(self.message.encode("utf-8") + b"\0")
+        dig.update(str(self.value.amount).encode("ascii") + b"\0")
+        dig.update(self.value.currency.symbol.encode("ascii") + b"\0")
+        return dig.hexdigest()
 
     def __repr__(self):
         return "#<fsb.transaction %s: %r>" % (self.value, self.message)
@@ -85,9 +100,15 @@ class account(object):
 
     def transactions(self):
         pagesz = 50
-        data = self.sess._jreq("v5/engagement/transactions/" + self.id, transactionsPerPage=pagesz, page=1)
-        for tx in resolve(data, ("transactions",)):
-            yield transaction(self, tx)
+        page = 1
+        while True:
+            data = self.sess._jreq("v5/engagement/transactions/" + self.id, transactionsPerPage=pagesz, page=page)
+            txlist = resolve(data, ("transactions",))
+            if len(txlist) < 1:
+                break
+            for tx in txlist:
+                yield transaction(self, tx)
+            page += 1
 
     def __repr__(self):
         return "#<fsb.account %s: %r>" % (self.fullnumber, self.name)
