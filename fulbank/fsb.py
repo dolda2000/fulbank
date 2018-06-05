@@ -96,6 +96,8 @@ class account(object):
     @property
     def fullnumber(self): return resolve(self.data, ("fullyFormattedNumber",))
     @property
+    def balance(self): return currency.currency.get(resolve(self.data, ("balance", "currencyCode"))).parse(resolve(self.data, ("balance", "amount")))
+    @property
     def name(self): return resolve(self._idata, ("name",))
 
     def transactions(self):
