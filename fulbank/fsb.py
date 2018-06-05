@@ -1,7 +1,7 @@
 import json, http.cookiejar, binascii, time, datetime, pickle, hashlib
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
-from . import currency
+from . import currency, auth
 soupify = lambda cont: soup(cont, "html.parser")
 
 apibase = "https://online.swedbank.se/TDE_DAP_Portal_REST_WEB/api/"
@@ -168,7 +168,9 @@ class session(object):
         rolesw = linkurl(resolve(prof["banks"][0], ("privateProfile", "links", "next", "uri")))
         self._jreq(rolesw, method="POST")
 
-    def auth_bankid(self, user):
+    def auth_bankid(self, user, conv=None):
+        if conv is None:
+            conv = auth.default()
         data = self._jreq("v5/identification/bankid/mobile", data = {
             "userId": user,
             "useEasyLogin": False,
@@ -176,13 +178,15 @@ class session(object):
         if data.get("status") != "USER_SIGN":
             raise fmterror("unexpected bankid status: " + str(data.get("status")))
         vfy = linkurl(resolve(data, ("links", "next", "uri")))
+        fst = None
         while True:
             time.sleep(3)
             vdat = self._jreq(vfy)
             st = vdat.get("status")
-            if st == "USER_SIGN":
-                continue
-            elif st == "CLIENT_NOT_STARTED":
+            if st in {"USER_SIGN", "CLIENT_NOT_STARTED"}:
+                if st != fst:
+                    conv.message("Status: %s" % (st,), auth.conv.msg_info)
+                    fst = st
                 continue
             elif st == "COMPLETE":
                 self._postlogin()
