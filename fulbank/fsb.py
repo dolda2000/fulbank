@@ -242,4 +242,4 @@ class session(object):
     @classmethod
     def load(cls, filename):
         with open(filename, "rb") as fp:
-            return picke.load(fp)
+            return pickle.load(fp)
