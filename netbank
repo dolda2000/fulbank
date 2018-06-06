@@ -20,7 +20,7 @@ def find(seq, *, item=None, match=None, key=None, default=LookupError):
         return default
 
 def usage(out):
-    out.write("usage: netbank [-h] BANK-ID COMMAND [ARGS...]")
+    out.write("usage: netbank [-h] BANK-ID COMMAND [ARGS...]\n")
 
 def requiresess(fn):
     def wrap(cmd, args):
