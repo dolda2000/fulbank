@@ -51,6 +51,7 @@ commands["login"] = cmd_login
 
 @requiresess
 def cmd_logout(cmd, args):
+    global sess
     if sess is not None:
         sess.close()
         sess = None
