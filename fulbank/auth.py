@@ -47,9 +47,9 @@ class termconv(conv):
             finally:
                 termios.tcsetattr(self.ifp.fileno(), termios.TCSANOW, bka)
 
-class ctermconv(conv):
+class ctermconv(termconv):
     def __init__(self, fp):
-        super().__init__(fp)
+        super().__init__(fp, fp)
         self.cfp = fp
 
     def close(self):
@@ -64,7 +64,7 @@ null = conv()
 stdioconv = termconv(sys.stdin, sys.stdout)
 
 def ttyconv():
-    return ctermconv(io.TextIOWrapper(io.FileIO(os.open("/dev/tty", os.O_RDWR | os.O_NCTTY), "r+")))
+    return ctermconv(io.TextIOWrapper(io.FileIO(os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY), "r+")))
 
 def default():
     return null
