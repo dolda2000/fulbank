@@ -1,0 +1,133 @@
+#!/usr/bin/python3
+
+import sys, os, getopt, pwd
+from fulbank import auth
+
+sesstype = None
+sess = None
+
+def find(seq, *, item=None, match=None, key=None, default=LookupError):
+    if key is None:
+        key = lambda o: o
+    if match is None and item is not None:
+        match = lambda o: o == item
+    for thing in seq:
+        if match(key(thing)):
+            return thing
+    if default is LookupError:
+        raise LookupError()
+    else:
+        return default
+
+def usage(out):
+    out.write("usage: netbank [-h] BANK-ID COMMAND [ARGS...]")
+
+def requiresess(fn):
+    def wrap(cmd, args):
+        if sess is None:
+            sys.stderr.write("netbank: %s: no current session\n" % (cmd))
+            sys.exit(1)
+        return fn(cmd, args)
+    return wrap
+
+commands = {}
+
+def cmd_login(cmd, args):
+    global sess
+    if len(args) < 1:
+        sys.stderr.write("usage: login TYPE\n")
+        sys.exit(1)
+    sess = sesstype.create()
+    if args[0] == "bankid":
+        if len(args) < 2:
+            sys.stderr.write("usage: login bankid USER-ID\n")
+            sys.exit(1)
+        with auth.ttyconv() as conv:
+            sess.auth_bankid(args[1], conv)
+    else:
+        sys.stderr.write("netbank: %s: unknown authentication type\n" % (args[0]))
+        sys.exit(1)
+commands["login"] = cmd_login
+
+@requiresess
+def cmd_logout(cmd, args):
+    if sess is not None:
+        sess.close()
+        sess = None
+commands["logout"] = cmd_logout
+
+@requiresess
+def cmd_ping(cmd, args):
+    sess.keepalive()
+commands["ping"] = cmd_ping
+
+@requiresess
+def cmd_lsacct(cmd, args):
+    for acct in sess.accounts:
+        sys.stdout.write("%s (%s): %s\n" % (acct.number, acct.name, acct.balance))
+commands["lsacct"] = cmd_lsacct
+
+@requiresess
+def cmd_lstxn(cmd, args):
+    opts, args = getopt.getopt(args, "n:")
+    num = 10
+    for o, a in opts:
+        if o == "-n":
+            num = int(a)
+    if len(args) < 1:
+        sys.stderr.write("usage: lstxn [-n NUM] ACCOUNT\n")
+        sys.exit(1)
+    try:
+        acct = find(sess.accounts, item=args[0], key=lambda acct: acct.number)
+    except LookupError:
+        sys.stderr.write("netbank: %s: no such account\n" % (args[0]))
+        sys.exit(1)
+    for i, txn in zip(range(num), acct.transactions()):
+        sys.stdout.write("%s %s: %s\n" % (txn.date.isoformat(), txn.value, txn.message))
+commands["lstxn"] = cmd_lstxn
+
+def main():
+    global sess, sesstype
+
+    opts, args = getopt.getopt(sys.argv[1:], "h")
+    for o, a in opts:
+        if o == "-h":
+            usage(sys.stdout)
+            sys.exit(0)
+    if len(args) < 2:
+        usage(sys.stderr)
+        sys.exit(1)
+
+    if args[0] == "fsb":
+        import fulbank.fsb
+        sesstype = fulbank.fsb.session
+    else:
+        sys.stderr.write("netbank: %s: unknown bank id\n" % (args[0]))
+        sys.exit(1)
+    sesspath = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".cache/fulbank", args[0])
+    cmd = args[1]
+    args = args[2:]
+
+    if os.path.exists(sesspath):
+        sess = sesstype.load(sesspath)
+    else:
+        sess = None
+    if cmd in commands:
+        commands[cmd](cmd, args)
+    else:
+        sys.stderr.write("netbank: %s: unknown command\n" % (cmd))
+        sys.exit(1)
+    if sess is not None:
+        sessdir = os.path.dirname(sesspath)
+        if not os.path.isdir(sessdir):
+            os.makedirs(sessdir)
+        sess.save(sesspath)
+    else:
+        if os.path.exists(sesspath):
+            os.unlink(sesspath)
+
+try:
+    if __name__ == "__main__":
+        main()
+except KeyboardInterrupt:
+    sys.exit(1)
