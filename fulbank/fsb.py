@@ -184,7 +184,7 @@ class cardaccount(object):
             page += 1
 
     def __repr__(self):
-        return "#<fsb.cardaccount %s: %r>" % (self.fullnumber, self.name)
+        return "#<fsb.cardaccount %s: %r>" % (self.number, self.name)
 
 class session(object):
     def __init__(self, dsid):
