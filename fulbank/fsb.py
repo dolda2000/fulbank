@@ -1,7 +1,7 @@
-import json, http.cookiejar, binascii, time, datetime, pickle, hashlib
+import json, http.cookiejar, binascii, time, datetime, pickle
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
-from . import currency, auth
+from . import currency, auth, data
 soupify = lambda cont: soup(cont, "html.parser")
 
 apibase = "https://online.swedbank.se/TDE_DAP_Portal_REST_WEB/api/"
@@ -52,7 +52,7 @@ def getdsid():
 def base64(data):
     return binascii.b2a_base64(data).decode("ascii").strip().rstrip("=")
 
-class transaction(object):
+class transaction(data.transaction):
     def __init__(self, account, data):
         self.account = account
         self._data = data
@@ -68,19 +68,7 @@ class transaction(object):
         p = time.strptime(resolve(self._data, ("accountingDate",)), self._datefmt)
         return datetime.date(p.tm_year, p.tm_mon, p.tm_mday)
 
-    @property
-    def hash(self):
-        dig = hashlib.sha256()
-        dig.update(str(self.date.toordinal()).encode("ascii") + b"\0")
-        dig.update(self.message.encode("utf-8") + b"\0")
-        dig.update(str(self.value.amount).encode("ascii") + b"\0")
-        dig.update(self.value.currency.symbol.encode("ascii") + b"\0")
-        return dig.hexdigest()
-
-    def __repr__(self):
-        return "#<fsb.transaction %s: %r>" % (self.value, self.message)
-
-class txnaccount(object):
+class txnaccount(data.txnaccount):
     def __init__(self, sess, id, idata):
         self.sess = sess
         self.id = id
@@ -116,10 +104,7 @@ class txnaccount(object):
                 yield transaction(self, tx)
             page += 1
 
-    def __repr__(self):
-        return "#<fsb.txnaccount %s: %r>" % (self.fullnumber, self.name)
-
-class cardtransaction(object):
+class cardtransaction(data.transaction):
     def __init__(self, account, data):
         self.account = account
         self._data = data
@@ -137,19 +122,7 @@ class cardtransaction(object):
         p = time.strptime(resolve(self._data, ("date",)), self._datefmt)
         return datetime.date(p.tm_year, p.tm_mon, p.tm_mday)
 
-    @property
-    def hash(self):
-        dig = hashlib.sha256()
-        dig.update(str(self.date.toordinal()).encode("ascii") + b"\0")
-        dig.update(self.message.encode("utf-8") + b"\0")
-        dig.update(str(self.value.amount).encode("ascii") + b"\0")
-        dig.update(self.value.currency.symbol.encode("ascii") + b"\0")
-        return dig.hexdigest()
-
-    def __repr__(self):
-        return "#<fsb.cardtransaction %s: %r>" % (self.value, self.message)
-
-class cardaccount(object):
+class cardaccount(data.cardaccount):
     def __init__(self, sess, id, idata):
         self.sess = sess
         self.id = id
@@ -182,9 +155,6 @@ class cardaccount(object):
             for tx in txlist:
                 yield cardtransaction(self, tx)
             page += 1
-
-    def __repr__(self):
-        return "#<fsb.cardaccount %s: %r>" % (self.number, self.name)
 
 class session(object):
     def __init__(self, dsid):
