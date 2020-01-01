@@ -15,19 +15,23 @@ class autherror(Exception):
     pass
 
 def resolve(d, keys, default=fmterror):
-    def err():
+    def err(key):
         if default is fmterror:
-            raise fmterror()
+            raise fmterror(key)
         return default
     def rec(d, keys):
         if len(keys) == 0:
             return d
         if isinstance(d, dict):
             if keys[0] not in d:
-                return err()
+                return err(keys[0])
+            return rec(d[keys[0]], keys[1:])
+        elif isinstance(d, list):
+            if not 0 <= keys[0] < len(d):
+                return err(keys[0])
             return rec(d[keys[0]], keys[1:])
         else:
-            return err()
+            return err(keys[0])
     return rec(d, keys)
 
 def linkurl(ln):
@@ -76,7 +80,7 @@ class transaction(object):
     def __repr__(self):
         return "#<fsb.transaction %s: %r>" % (self.value, self.message)
 
-class account(object):
+class txnaccount(object):
     def __init__(self, sess, id, idata):
         self.sess = sess
         self.id = id
@@ -113,7 +117,74 @@ class account(object):
             page += 1
 
     def __repr__(self):
-        return "#<fsb.account %s: %r>" % (self.fullnumber, self.name)
+        return "#<fsb.txnaccount %s: %r>" % (self.fullnumber, self.name)
+
+class cardtransaction(object):
+    def __init__(self, account, data):
+        self.account = account
+        self._data = data
+
+    _datefmt = "%Y-%m-%d"
+
+    @property
+    def value(self):
+        am = resolve(self._data, ("localAmount",))
+        return currency.currency.get(resolve(am, ("currencyCode",))).parse(resolve(am, ("amount",)))
+    @property
+    def message(self): return resolve(self._data, ("description",))
+    @property
+    def date(self):
+        p = time.strptime(resolve(self._data, ("date",)), self._datefmt)
+        return datetime.date(p.tm_year, p.tm_mon, p.tm_mday)
+
+    @property
+    def hash(self):
+        dig = hashlib.sha256()
+        dig.update(str(self.date.toordinal()).encode("ascii") + b"\0")
+        dig.update(self.message.encode("utf-8") + b"\0")
+        dig.update(str(self.value.amount).encode("ascii") + b"\0")
+        dig.update(self.value.currency.symbol.encode("ascii") + b"\0")
+        return dig.hexdigest()
+
+    def __repr__(self):
+        return "#<fsb.cardtransaction %s: %r>" % (self.value, self.message)
+
+class cardaccount(object):
+    def __init__(self, sess, id, idata):
+        self.sess = sess
+        self.id = id
+        self._data = None
+        self._idata = idata
+
+    @property
+    def data(self):
+        if self._data is None:
+            self._data = self.sess._jreq("v5/engagement/cardaccount/" + self.id)
+        return self._data
+
+    @property
+    def number(self): return resolve(self.data, ("cardAccount", "cardNumber"))
+    @property
+    def balance(self):
+        cc = resolve(self.data, ("transactions", 0, "localAmount", "currencyCode"))
+        return currency.currency.get(cc).parse(resolve(self.data, ("cardAccount", "currentBalance")))
+    @property
+    def name(self): return resolve(self._idata, ("name",))
+
+    def transactions(self):
+        pagesz = 50
+        page = 1
+        while True:
+            data = self.sess._jreq("v5/engagement/cardaccount/" + self.id, transactionsPerPage=pagesz, page=page)
+            txlist = resolve(data, ("transactions",))
+            if len(txlist) < 1:
+                break
+            for tx in txlist:
+                yield cardtransaction(self, tx)
+            page += 1
+
+    def __repr__(self):
+        return "#<fsb.cardaccount %s: %r>" % (self.fullnumber, self.name)
 
 class session(object):
     def __init__(self, dsid):
@@ -206,7 +277,9 @@ class session(object):
             data = self._jreq("v5/engagement/overview")
             accounts = []
             for acct in resolve(data, ("transactionAccounts",)):
-                accounts.append(account(self, resolve(acct, ("id",)), acct))
+                accounts.append(txnaccount(self, resolve(acct, ("id",)), acct))
+            for acct in resolve(data, ("cardAccounts",)):
+                accounts.append(cardaccount(self, resolve(acct, ("id",)), acct))
             self._accounts = accounts
         return self._accounts
 
