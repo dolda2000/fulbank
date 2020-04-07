@@ -11,7 +11,7 @@ serviceid = "B7dZHQcY78VRVz9l"
 class fmterror(Exception):
     pass
 
-class autherror(Exception):
+class autherror(auth.autherror):
     pass
 
 class jsonerror(Exception):

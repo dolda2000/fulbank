@@ -1,5 +1,8 @@
 import sys, os, io, termios
 
+class autherror(Exception):
+    pass
+
 class conv(object):
     msg_notice = 0
     msg_info = 1
