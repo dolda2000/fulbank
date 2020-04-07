@@ -1,4 +1,4 @@
-import json, http.cookiejar, binascii, time, datetime, pickle
+import json, http.cookiejar, binascii, time, datetime, pickle, urllib.error
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
 from . import currency, auth, data
@@ -13,6 +13,20 @@ class fmterror(Exception):
 
 class autherror(Exception):
     pass
+
+class jsonerror(Exception):
+    def __init__(self, code, data, headers):
+        self.code = code
+        self.data = data
+        self.headers = headers
+
+    @classmethod
+    def fromerr(cls, err):
+        cs = err.headers.get_content_charset()
+        if cs is None:
+            cs = "utf-8"
+        data = json.loads(err.read().decode(cs))
+        return cls(err.code, data, err.headers)
 
 def resolve(d, keys, default=fmterror):
     def err(key):
@@ -194,7 +208,11 @@ class session(object):
     def _jreq(self, *args, **kwargs):
         headers = kwargs.pop("headers", {})
         headers["Accept"] = "application/json"
-        ret = self._req(*args, headers=headers, **kwargs)
+        try:
+            ret = self._req(*args, headers=headers, **kwargs)
+        except urllib.error.HTTPError as e:
+            if e.headers.get_content_type() == "application/json":
+                raise jsonerror.fromerr(e)
         return json.loads(ret.decode("utf-8"))
 
     def _postlogin(self):
@@ -212,10 +230,19 @@ class session(object):
     def auth_bankid(self, user, conv=None):
         if conv is None:
             conv = auth.default()
-        data = self._jreq("v5/identification/bankid/mobile", data = {
-            "userId": user,
-            "useEasyLogin": False,
-            "generateEasyLoginId": False})
+        try:
+            data = self._jreq("v5/identification/bankid/mobile", data = {
+                "userId": user,
+                "useEasyLogin": False,
+                "generateEasyLoginId": False})
+        except jsonerror as e:
+            if e.code == 400:
+                flds = resolve(e.data, ("errorMessages", "fields"), False)
+                if isinstance(flds, list):
+                    for fld in flds:
+                        if resolve(fld, ("field",), None) == "userId":
+                            raise autherror(fld["message"])
+            raise
         if data.get("status") != "USER_SIGN":
             raise fmterror("unexpected bankid status: " + str(data.get("status")))
         vfy = linkurl(resolve(data, ("links", "next", "uri")))
