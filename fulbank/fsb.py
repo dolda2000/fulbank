@@ -289,6 +289,18 @@ class session(object):
         self.logout()
         self._req("v5/framework/clientsession", method="DELETE")
 
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["jar"] = list(state["jar"].cookiejar)
+        return state
+
+    def __setstate__(self, state):
+        jar = request.HTTPCookieProcessor()
+        for cookie in state["jar"]:
+            jar.cookiejar.set_cookie(cookie)
+        state["jar"] = jar
+        self.__dict__.update(state)
+
     def __enter__(self):
         return self
 
