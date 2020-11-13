@@ -243,14 +243,10 @@ class session(object):
                         if resolve(fld, ("field",), None) == "userId":
                             raise autherror(fld["message"])
             raise
-        if data.get("status") != "USER_SIGN":
-            raise fmterror("unexpected bankid status: " + str(data.get("status")))
+        st = data.get("status")
         vfy = linkurl(resolve(data, ("links", "next", "uri")))
         fst = None
         while True:
-            time.sleep(3)
-            vdat = self._jreq(vfy)
-            st = vdat.get("status")
             if st in {"USER_SIGN", "CLIENT_NOT_STARTED"}:
                 if st != fst:
                     conv.message("Status: %s" % (st,), auth.conv.msg_info)
@@ -263,6 +259,9 @@ class session(object):
                 raise autherror("authentication cancelled")
             else:
                 raise fmterror("unexpected bankid status: " + str(st))
+            time.sleep(3)
+            vdat = self._jreq(vfy)
+            st = vdat.get("status")
 
     def keepalive(self):
         data = self._jreq("v5/framework/clientsession")
