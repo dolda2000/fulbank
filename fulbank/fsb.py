@@ -251,7 +251,6 @@ class session(object):
                 if st != fst:
                     conv.message("Status: %s" % (st,), auth.conv.msg_info)
                     fst = st
-                continue
             elif st == "COMPLETE":
                 self._postlogin()
                 return
