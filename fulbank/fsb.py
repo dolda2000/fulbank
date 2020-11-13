@@ -257,6 +257,8 @@ class session(object):
                 return
             elif st == "CANCELLED":
                 raise autherror("authentication cancelled")
+            elif st == "OUTSTANDING_TRANSACTION":
+                raise autherror("another bankid transaction already in progress")
             else:
                 raise fmterror("unexpected bankid status: " + str(st))
             time.sleep(3)
