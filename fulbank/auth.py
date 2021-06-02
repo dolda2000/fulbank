@@ -1,4 +1,4 @@
-import sys, os, io, termios
+import sys, os, io, termios, tempfile, subprocess
 
 class autherror(Exception):
     pass
@@ -14,6 +14,8 @@ class conv(object):
         pass
     def prompt(self, prompt, echo, default=None):
         return default
+    def image(self, image):
+        pass
 
 class termconv(conv):
     def __init__(self, ifp, ofp):
@@ -49,6 +51,14 @@ class termconv(conv):
                 return ret[:-1]
             finally:
                 termios.tcsetattr(self.ifp.fileno(), termios.TCSANOW, bka)
+    def image(self, image):
+        fd, fn = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, "wb") as fp:
+                image.save(fp, "PNG")
+            subprocess.call(["sxiv", fn])
+        finally:
+            os.unlink(fn)
 
 class ctermconv(termconv):
     def __init__(self, fp):
