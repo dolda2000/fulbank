@@ -59,18 +59,21 @@ def cmd_login(cmd, args):
         sys.exit(1)
     sess = sesstype.create()
     if args[0] == "bankid":
-        if len(args) < 2:
-            sys.stderr.write("usage: login bankid USER-ID\n")
-            sys.exit(1)
-        with auth.ttyconv() as conv:
-            try:
-                sess.auth_bankid(args[1], conv)
-            except auth.autherror as err:
-                sys.stderr.write("netbank: authentication failed: %s\n" % err)
-                sys.exit(1)
+        authfun = sess.auth_bankid
+    elif args[0] == "token":
+        authfun = sess.auth_token
     else:
         sys.stderr.write("netbank: %s: unknown authentication type\n" % (args[0]))
         sys.exit(1)
+    if len(args) < 2:
+        sys.stderr.write("usage: login bankid USER-ID\n")
+        sys.exit(1)
+    with auth.ttyconv() as conv:
+        try:
+            authfun(args[1], conv)
+        except auth.autherror as err:
+            sys.stderr.write("netbank: authentication failed: %s\n" % err)
+            sys.exit(1)
 commands["login"] = cmd_login
 
 @requiresess
