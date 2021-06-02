@@ -1,4 +1,5 @@
-import json, http.cookiejar, binascii, time, datetime, pickle, urllib.error
+import json, http.cookiejar, binascii, time, datetime, pickle, urllib.error, io
+from PIL import Image
 from urllib import request, parse
 from bs4 import BeautifulSoup as soup
 from . import currency, auth, data
@@ -226,6 +227,46 @@ class session(object):
             raise fmterror("do not know the meaning of multiple banks")
         rolesw = linkurl(resolve(prof["banks"][0], ("privateProfile", "links", "next", "uri")))
         self._jreq(rolesw, method="POST")
+
+    def auth_token(self, user, conv=None):
+        if conv is None:
+            conv = auth.default()
+        try:
+            data = self._jreq("v5/identification/securitytoken/challenge", data = {
+                "userId": user,
+                "useEasyLogin": "false",
+                "generateEasyLoginId": "false"})
+        except jsonerror as e:
+            if e.code == 400:
+                flds = resolve(e.data, ("errorMessages", "fields"), False)
+                if isinstance(flds, list):
+                    for fld in flds:
+                        if resolve(fld, ("field",), None) == "userId":
+                            raise autherror(fld["message"])
+            raise
+        if data.get("useOneTimePassword"):
+            raise fmterror("unexpectedly found useOneTimePassword")
+        if data.get("challenge") != "":
+            raise fmterror("unexpected challenge: " + str(data.get("challenge")))
+        if not isinstance(data.get("imageChallenge"), dict) or resolve(data, ("imageChallenge", "method")) != "GET":
+            raise fmterror("invalid image challenge: " + str(data.get("imageChallenge")))
+        iurl = linkurl(resolve(data, ("imageChallenge", "uri")))
+        vfy = linkurl(resolve(data, ("links", "next", "uri")))
+        img = Image.open(io.BytesIO(self._req(iurl)))
+        conv.image(img)
+        response = conv.prompt("Token response: ", True)
+        try:
+            data = self._jreq(vfy, data={"response": response})
+        except jsonerror as e:
+            msgs = resolve(e.data, ("errorMessages", "general"), False)
+            if isinstance(msgs, list):
+                for msg in msgs:
+                    if msg.get("message"):
+                        raise autherror(msg.get("message"))
+            raise
+        if not data.get("authenticationRole", ""):
+            raise fmterror("authentication appears to have succeded, but there is no authenticationRole: " + str(data))
+        self._postlogin()
 
     def auth_bankid(self, user, conv=None):
         if conv is None:
