@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 import sys, os, getopt, pwd, operator
-from fulbank import auth
+from fulbank import auth, data
 
-sesstype = None
+sessname = data.defaultsess()
 sess = None
 
 def pfxmatch(pfx, item):
@@ -40,7 +40,7 @@ def find(seq, *, item=None, test=None, match=None, key=None, default=LookupError
         return default
 
 def usage(out):
-    out.write("usage: netbank [-h] BANK-ID COMMAND [ARGS...]\n")
+    out.write("usage: netbank [-h] [-s SESSION-ID] COMMAND [ARGS...]\n")
 
 def requiresess(fn):
     def wrap(cmd, args):
@@ -54,10 +54,15 @@ commands = {}
 
 def cmd_login(cmd, args):
     global sess
+    opts, args = getopt.getopt(args, "t:")
+    typename = sessname
+    for o, a in opts:
+        if o == "-t":
+            typename = a
     if len(args) < 1:
-        sys.stderr.write("usage: login TYPE\n")
+        sys.stderr.write("usage: login [-t BANK-ID] TYPE\n")
         sys.exit(1)
-    sess = sesstype.create()
+    sess = data.getsessnam(typename).create()
     if args[0] == "bankid":
         authfun = sess.auth_bankid
     elif args[0] == "token":
@@ -118,44 +123,29 @@ def cmd_lstxn(cmd, args):
 commands["lstxn"] = cmd_lstxn
 
 def main():
-    global sess, sesstype
+    global sess, sessname
 
-    opts, args = getopt.getopt(sys.argv[1:], "h")
+    opts, args = getopt.getopt(sys.argv[1:], "hs:")
     for o, a in opts:
         if o == "-h":
             usage(sys.stdout)
             sys.exit(0)
-    if len(args) < 2:
+        if o == "-s":
+            sessname = a
+    if len(args) < 1:
         usage(sys.stderr)
         sys.exit(1)
 
-    if args[0] == "fsb":
-        import fulbank.fsb
-        sesstype = fulbank.fsb.session
-    else:
-        sys.stderr.write("netbank: %s: unknown bank id\n" % (args[0]))
-        sys.exit(1)
-    sesspath = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".cache/fulbank", args[0])
-    cmd = args[1]
-    args = args[2:]
+    cmd = args[0]
+    args = args[1:]
 
-    if os.path.exists(sesspath):
-        sess = sesstype.load(sesspath)
-    else:
-        sess = None
+    sess = data.loadsess(sessname, None)
     if cmd in commands:
         commands[cmd](cmd, args)
     else:
         sys.stderr.write("netbank: %s: unknown command\n" % (cmd))
         sys.exit(1)
-    if sess is not None:
-        sessdir = os.path.dirname(sesspath)
-        if not os.path.isdir(sessdir):
-            os.makedirs(sessdir)
-        sess.save(sesspath)
-    else:
-        if os.path.exists(sesspath):
-            os.unlink(sesspath)
+    data.savesess(sess, sessname)
 
 try:
     if __name__ == "__main__":

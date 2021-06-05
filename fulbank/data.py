@@ -1,4 +1,4 @@
-import hashlib
+import os, pwd, hashlib, pickle
 
 def _localname(type):
     mod = type.__module__
@@ -46,3 +46,63 @@ class transaction(object):
 
     def __repr__(self):
         return "#<%s %s: %r>" % (_localname(type(self)), self.value, self.message)
+
+class session(object):
+    def save(self, filename):
+        with open(filename, "wb") as fp:
+            pickle.dump(self, fp)
+
+    @staticmethod
+    def load(filename):
+        with open(filename, "rb") as fp:
+            return pickle.load(fp)
+
+def getsessnam(name):
+    if name == "fsb":
+        from . import fsb
+        return fsb.session
+    raise ValueError("no such known session type: " + name)
+
+def _sesspath(name):
+    return os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".cache/fulbank", name)
+
+def defaultsess():
+    ret = os.getenv("NETBANKSESS")
+    if ret:
+        return ret
+    return "master"
+
+def loadsess(name=None, default=FileNotFoundError):
+    if name is None: name = defaultsess()
+    path = _sesspath(name)
+    if not os.path.exists(path):
+        if default is FileNotFoundError:
+            raise FileNotFoundError(name)
+        return default
+    return session.load(path)
+
+def savesess(sess, name=None):
+    if name is None: name = defaultsess()
+    path = _sesspath(name)
+    if sess is not None:
+        sessdir = os.path.dirname(path)
+        if not os.path.isdir(sessdir):
+            os.makedirs(sessdir)
+        return sess.save(_sesspath(name))
+    else:
+        if os.path.exists(path):
+            os.unlink(path)
+
+class savedsess(object):
+    def __init__(self, name=None):
+        if name is None: name = defaultsess()
+        self.name = name
+        self.sess = None
+
+    def __enter__(self):
+        self.sess = loadsess(self.name)
+        return self.sess
+
+    def __exit__(self):
+        savesess(self.sess, name)
+        self.sess = None

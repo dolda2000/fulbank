@@ -171,7 +171,7 @@ class cardaccount(data.cardaccount):
                 yield cardtransaction(self, tx)
             page += 1
 
-class session(object):
+class session(data.session):
     def __init__(self, dsid):
         self.dsid = dsid
         self.auth = base64((serviceid + ":" + str(int(time.time() * 1000))).encode("ascii"))
@@ -358,12 +358,3 @@ class session(object):
     @classmethod
     def create(cls):
         return cls(getdsid())
-
-    def save(self, filename):
-        with open(filename, "wb") as fp:
-            pickle.dump(self, fp)
-
-    @classmethod
-    def load(cls, filename):
-        with open(filename, "rb") as fp:
-            return pickle.load(fp)
