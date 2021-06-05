@@ -312,11 +312,12 @@ class session(object):
     @property
     def accounts(self):
         if self._accounts is None:
-            data = self._jreq("v5/engagement/overview")
+            txndata = self._jreq("v5/engagement/overview")
+            crddata = self._jreq("v5/card/creditcard")
             accounts = []
-            for acct in resolve(data, ("transactionAccounts",)):
+            for acct in resolve(txndata, ("transactionAccounts",)):
                 accounts.append(txnaccount(self, resolve(acct, ("id",)), acct))
-            for acct in resolve(data, ("cardAccounts",)):
+            for acct in resolve(crddata, ("cardAccounts",)):
                 accounts.append(cardaccount(self, resolve(acct, ("id",)), acct))
             self._accounts = accounts
         return self._accounts
