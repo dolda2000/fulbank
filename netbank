@@ -21,28 +21,23 @@ commands = {}
 
 def cmd_login(cmd, args):
     global sess
-    opts, args = getopt.getopt(args, "t:")
-    typename = sessname
-    for o, a in opts:
-        if o == "-t":
-            typename = a
-    if len(args) < 1:
-        sys.stderr.write("usage: login [-t BANK-ID] TYPE\n")
+    if len(args) < 2:
+        sys.stderr.write("usage: login BANK-ID TYPE [ARGS...]\n")
         sys.exit(1)
-    sess = data.getsessnam(typename).create()
-    if args[0] == "bankid":
+    sess = data.getsessnam(args[0]).create()
+    if args[1] == "bankid":
         authfun = sess.auth_bankid
-    elif args[0] == "token":
+    elif args[1] == "token":
         authfun = sess.auth_token
     else:
-        sys.stderr.write("netbank: %s: unknown authentication type\n" % (args[0]))
+        sys.stderr.write("netbank: %s: unknown authentication type\n" % (args[1]))
         sys.exit(1)
-    if len(args) < 2:
+    if len(args) < 3:
         sys.stderr.write("usage: login bankid USER-ID\n")
         sys.exit(1)
     with auth.ttyconv() as conv:
         try:
-            authfun(args[1], conv)
+            authfun(args[2], conv)
         except auth.autherror as err:
             sys.stderr.write("netbank: authentication failed: %s\n" % err)
             sys.exit(1)
