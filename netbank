@@ -1,43 +1,10 @@
 #!/usr/bin/python3
 
-import sys, os, getopt, pwd, operator
-from fulbank import auth, data
+import sys, os, getopt, pwd
+from fulbank import auth, data, util
 
 sessname = data.defaultsess()
 sess = None
-
-def pfxmatch(pfx, item):
-    return str(item)[:len(pfx)] == pfx
-
-class ambiguous(LookupError):
-    def __init__(self, a, b):
-        super().__init__("ambigous match: %s and %s" % (a, b))
-        self.a = a
-        self.b = b
-
-def find(seq, *, item=None, test=None, match=None, key=None, default=LookupError):
-    if key is None:
-        key = lambda o: o
-    if match is None and item is not None:
-        match = lambda o: test(item, o)
-    if test is None:
-        test = operator.eq
-    found = None
-    for thing in seq:
-        if match(key(thing)):
-            if found is None:
-                found = thing
-            else:
-                if default is LookupError:
-                    raise ambiguous(key(found), key(thing))
-                else:
-                    return default
-    if found is not None:
-        return found
-    if default is LookupError:
-        raise LookupError()
-    else:
-        return default
 
 def usage(out):
     out.write("usage: netbank [-h] [-s SESSION-ID] COMMAND [ARGS...]\n")
@@ -111,8 +78,8 @@ def cmd_lstxn(cmd, args):
         sys.stderr.write("usage: lstxn [-n NUM] ACCOUNT\n")
         sys.exit(1)
     try:
-        acct = find(sess.accounts, item=args[0], key=lambda acct: acct.number, test=pfxmatch)
-    except ambiguous as exc:
+        acct = util.find(sess.accounts, item=args[0], key=lambda acct: acct.number, test=util.pfxmatch)
+    except util.ambiguous as exc:
         sys.stderr.write("netbank: %s: ambiguous match between %s and %s\n" % (args[0], exc.a, exc.b))
         sys.exit(1)
     except LookupError:
