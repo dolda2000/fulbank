@@ -143,3 +143,6 @@ class value(object):
         if self.currency != other.currency:
             raise ValueError("cannot compare %s with %s" % (self.currency.symbol, other.currency.symbol))
         return self.amount >= other.amount
+
+    def __hash__(self):
+        return hash(self.amount) + hash(self.currency)
