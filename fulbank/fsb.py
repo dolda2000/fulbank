@@ -385,5 +385,5 @@ class session(data.session):
         if "SWBTC" not in cookies:
             raise fmterror("did not get SWBTC cookie from initial request")
         if "dsid" not in cookies:
-            raise fmterror("did not get SWBTC cookie from initial request")
+            raise fmterror("did not get dsid cookie from initial request")
         return self
