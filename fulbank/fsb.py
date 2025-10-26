@@ -74,8 +74,8 @@ def cktyp(d, typ, name, default=None):
         raise fmterror("unexpected type for " + name + ": " + repr(d))
     return d
 
-def tget(d, keys, typ, name, default=None):
-    return cktyp(resolve(d, keys), typ, name, default)
+def tget(d, keys, typ, name=None, default=None):
+    return cktyp(resolve(d, keys), typ, name or str(keys), default)
 
 def linkurl(ln, method):
     if method is not None:
@@ -148,43 +148,37 @@ class cardtransaction(data.transaction):
 
     @property
     def value(self):
-        am = resolve(self._data, ("localAmount",))
-        return currency.currency.get(resolve(am, ("currencyCode",))).parse(resolve(am, ("amount",)))
+        am = tget(self._data, "localAmount", dict)
+        return currency.currency.get(tget(am, "currencyCode", str)).parse(tget(am, "formattedAmount", str))
     @property
-    def message(self): return resolve(self._data, ("description",))
+    def message(self): return tget(self._data, "description", str)
     @property
     def date(self):
         p = time.strptime(resolve(self._data, ("date",)), self._datefmt)
         return datetime.date(p.tm_year, p.tm_mon, p.tm_mday)
 
 class cardaccount(data.cardaccount):
-    def __init__(self, sess, id, idata):
+    def __init__(self, sess, data):
         self.sess = sess
-        self.id = id
-        self._data = None
-        self._idata = idata
+        self.data = data
 
     @property
-    def data(self):
-        if self._data is None:
-            self._data = self.sess._jreq(tdecall, "v5/engagement/cardaccount/" + self.id)
-        return self._data
-
+    def id(self): return tget(self.data, "id", str, "card id")
     @property
-    def number(self): return resolve(self.data, ("cardAccount", "cardNumber"))
+    def number(self): return tget(self.data, "number", str, "card number")
     @property
     def balance(self):
-        cc = resolve(self.data, ("transactions", 0, "localAmount", "currencyCode"))
-        return currency.currency.get(cc).parse(resolve(self.data, ("cardAccount", "currentBalance")))
+        cc = tget(self.data, ("accountAmounts", "currencyCode"), str)
+        return currency.currency.get(cc).parse(tget(self.data, ("accountAmounts", "currentBalance", "formattedAmount"), str))
     @property
-    def name(self): return resolve(self._idata, ("name",))
+    def name(self): return tget(self.data, "name", str, "card name")
 
     def transactions(self):
         pagesz = 50
         page = 1
         while True:
-            data = self.sess._jreq(tdecall, "v5/engagement/cardaccount/" + self.id, query={"transactionsPerPage": pagesz, "page": page})
-            txlist = resolve(data, ("transactions",))
+            data = self.sess._jreq(apicall, "cards/private/credit/v1/cards/" + self.id + "/transactions", query={"itemsPerPage": pagesz, "page": page})
+            txlist = tget(data, "transactions", list)
             if len(txlist) < 1:
                 break
             for tx in txlist:
@@ -339,12 +333,12 @@ class session(data.session):
     def accounts(self):
         if self._accounts is None:
             txndata = self._jreq(tdecall, "v5/engagement/overview")
-            crddata = self._jreq(tdecall, "v5/card/creditcard")
+            crddata = self._jreq(apicall, "cards/private/credit/v1/cards")
             accounts = []
-            for acct in resolve(txndata, ("transactionAccounts",)):
+            for acct in tget(txndata, "transactionAccounts", list, "transaction accounts"):
                 accounts.append(txnaccount(self, resolve(acct, ("id",)), acct))
-            for acct in resolve(crddata, ("cardAccounts",)):
-                accounts.append(cardaccount(self, resolve(acct, ("id",)), acct))
+            for acct in tget(crddata, "mainCards", list, "card accounts"):
+                accounts.append(cardaccount(self, acct))
             self._accounts = accounts
         return self._accounts
 
