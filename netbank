@@ -32,12 +32,9 @@ def cmd_login(cmd, args):
     else:
         sys.stderr.write("netbank: %s: unknown authentication type\n" % (args[1]))
         sys.exit(1)
-    if len(args) < 3:
-        sys.stderr.write("usage: login bankid USER-ID\n")
-        sys.exit(1)
     with auth.ttyconv() as conv:
         try:
-            authfun(args[2], conv)
+            authfun(*args[2:], conv=conv)
         except auth.autherror as err:
             sys.stderr.write("netbank: authentication failed: %s\n" % err)
             sys.exit(1)

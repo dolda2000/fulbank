@@ -250,7 +250,7 @@ class session(data.session):
             raise fmterror("no identified user even after successful authentication")
         self.userid = uid
 
-    def auth_token(self, user, conv=None):
+    def auth_token(self, user, *, conv=None):
         if conv is None:
             conv = auth.default()
         try:
@@ -287,12 +287,11 @@ class session(data.session):
             raise fmterror("unexpected token challenge: type: " + data.get("type"))
         self._postlogin()
 
-    def auth_bankid(self, user, conv=None):
+    def auth_bankid(self, *, conv=None):
         if conv is None:
             conv = auth.default()
         try:
             data = self._jreq(apicall, "cross-channel/customer-security/authentication/v1/bankid/authentication", data={
-                "userId": user,
                 "idMethod": "MOBILE_BANKID",
                 "generateEasyLogin": False,
                 "mockedAuthencation": False,
